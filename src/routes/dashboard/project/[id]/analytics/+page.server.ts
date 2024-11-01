@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { prisma } from "../../../../../prisma";
+import { prisma } from "../../../../../drizzle";
 import type { PageServerLoad } from "./$types";
 
 export const load = (async ({ params, locals }) => {

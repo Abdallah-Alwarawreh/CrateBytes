@@ -1,5 +1,5 @@
 import { redirect, type Actions } from "@sveltejs/kit";
-import { prisma } from "../../../../../prisma";
+import { prisma } from "../../../../../drizzle";
 import type { PageServerLoad } from "./$types";
 import { fail, superValidate } from "sveltekit-superforms";
 import { zod } from "sveltekit-superforms/adapters";

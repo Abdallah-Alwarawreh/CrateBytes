@@ -1,10 +1,17 @@
 import { fail, redirect, type Actions } from "@sveltejs/kit";
-import { prisma } from "../../prisma";
+import { db } from "../../drizzle";
 import type { PageServerLoad } from "./$types";
 import { superValidate } from "sveltekit-superforms";
 import { zod } from "sveltekit-superforms/adapters";
 import { createProjectSchema, deleteProjectSchema } from "../../schema";
 import { getPosts } from "$lib/utils";
+import {
+    leaderboardentryTable,
+    leaderboardTable,
+    playerTable,
+    projectTable,
+} from "../../db/schema";
+import { desc, eq } from "drizzle-orm";
 
 export const load = (async ({ parent }) => {
     const { session } = await parent();
@@ -13,14 +20,15 @@ export const load = (async ({ parent }) => {
         throw redirect(302, "/login");
     }
 
-    const Projects = await prisma.project.findMany({
-        where: {
-            ownerId: session.user?.id,
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-    });
+    if (!session.user?.id) {
+        throw redirect(302, "/login");
+    }
+
+    const Projects = await db
+        .select()
+        .from(projectTable)
+        .where(eq(projectTable.ownerId, session.user.id))
+        .orderBy(desc(projectTable.createdAt));
 
     // TODO: pull from database
     const { posts } = await getPosts(0);
@@ -57,26 +65,38 @@ export const actions: Actions = {
             });
         }
 
-        const project = await prisma.project
-            .create({
-                data: {
-                    name: CreateProjectForm.data.name,
-                    description: CreateProjectForm.data.description,
-                    owner: {
-                        connect: {
-                            id: session.user?.id as string,
-                        },
-                    },
-                    projectKey: createProjectKey(session.user?.id as string),
-                },
-            })
-            .catch((error) => {
-                console.log(error);
+        if (!session.user?.id) {
+            return fail(401, {
+                CreateProjectForm,
             });
+        }
+
+        await db
+            .insert(projectTable)
+            .values({
+                name: CreateProjectForm.data.name,
+                description: CreateProjectForm.data.description,
+                ownerId: session.user.id,
+                projectKey: createProjectKey(session.user.id),
+            })
+            .$returningId();
+
+        const project = await db
+            .select({ id: projectTable.id })
+            .from(projectTable)
+            .where(eq(projectTable.ownerId, session.user.id))
+            .orderBy(desc(projectTable.createdAt))
+            .limit(1);
+
+        if (!project) {
+            return fail(500, {
+                CreateProjectForm,
+            });
+        }
 
         return {
             CreateProjectForm,
-            projectId: project?.id,
+            projectId: project[0].id,
         };
     },
     DeleteProject: async (event) => {
@@ -98,51 +118,9 @@ export const actions: Actions = {
             });
         }
 
-        await prisma.playerCustomData.deleteMany({
-            where: {
-                player: {
-                    projectId: DeleteProjectForm.data.ProjectId,
-                },
-            },
-        });
-
-        await prisma.playerSession.deleteMany({
-            where: {
-                player: {
-                    projectId: DeleteProjectForm.data.ProjectId,
-                },
-            },
-        });
-
-        await prisma.player.deleteMany({
-            where: {
-                projectId: DeleteProjectForm.data.ProjectId,
-            },
-        });
-
-        await prisma.leaderboardEntry.deleteMany({
-            where: {
-                leaderboard: {
-                    projectId: DeleteProjectForm.data.ProjectId,
-                },
-            },
-        });
-
-        await prisma.leaderboard.deleteMany({
-            where: {
-                projectId: DeleteProjectForm.data.ProjectId,
-            },
-        });
-
-        await prisma.project
-            .delete({
-                where: {
-                    id: DeleteProjectForm.data.ProjectId,
-                },
-            })
-            .catch((error) => {
-                console.log(error);
-            });
+        await db
+            .delete(projectTable)
+            .where(eq(projectTable.id, DeleteProjectForm.data.ProjectId));
 
         return {
             DeleteProjectForm,

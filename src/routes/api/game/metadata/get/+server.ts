@@ -1,5 +1,5 @@
 import type { RequestHandler } from "@sveltejs/kit";
-import { prisma } from "../../../../../prisma.js";
+import { prisma } from "../../../../../drizzle.js";
 
 export async function GET({ locals, params, request }) {
     const playerId = locals.user.playerId;

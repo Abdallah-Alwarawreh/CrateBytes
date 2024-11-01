@@ -4,8 +4,8 @@ import { SvelteKitAuth } from "@auth/sveltekit";
 import GitHub from "@auth/sveltekit/providers/github";
 import { env } from "$env/dynamic/private";
 import discord from "@auth/sveltekit/providers/discord";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "./prisma";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { db } from "./drizzle";
 import google from "@auth/sveltekit/providers/google";
 import { dev } from "$app/environment";
 
@@ -22,7 +22,7 @@ const {
 // @ts-ignore
 export const { handle, signIn, signOut } = SvelteKitAuth(function () {
     const authOptions = {
-        adapter: PrismaAdapter(prisma),
+        adapter: DrizzleAdapter(db),
         providers: [
             GitHub({
                 clientId: GITHUB_CLIENT_ID,

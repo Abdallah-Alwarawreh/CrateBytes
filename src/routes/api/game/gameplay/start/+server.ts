@@ -1,5 +1,11 @@
 import type { RequestHandler } from "@sveltejs/kit";
-import { prisma } from "../../../../../prisma.js";
+import { db } from "../../../../../drizzle.js";
+import {
+    playersessionTable,
+    playerTable,
+    projectTable,
+} from "../../../../../db/schema.js";
+import { and, eq, isNull } from "drizzle-orm";
 
 export async function POST(event) {
     const playerId = event.locals.user.playerId;
@@ -16,11 +22,12 @@ export async function POST(event) {
         );
     }
 
-    const project = await prisma.project.findUnique({
-        where: { projectKey },
-    });
+    const projects = await db
+        .select()
+        .from(projectTable)
+        .where(eq(projectTable.projectKey, projectKey));
 
-    if (!project) {
+    if (!projects[0]) {
         return new Response(
             JSON.stringify({
                 status: 404,
@@ -31,14 +38,19 @@ export async function POST(event) {
         );
     }
 
-    const player = await prisma.player.findUnique({
-        where: {
-            playerId,
-            projectId: project.id,
-        },
-    });
+    const project = projects[0];
 
-    if (!player) {
+    const players = await db
+        .select()
+        .from(playerTable)
+        .where(
+            and(
+                eq(playerTable.playerId, playerId),
+                eq(playerTable.projectId, project.id!)
+            )
+        );
+
+    if (!players[0]) {
         return new Response(
             JSON.stringify({
                 status: 404,
@@ -49,15 +61,20 @@ export async function POST(event) {
         );
     }
 
-    const activeSession = await prisma.playerSession.findFirst({
-        where: {
-            playerId: player.id,
-            projectId: project.id,
-            endTime: null,
-        },
-    });
+    const player = players[0];
 
-    if (activeSession) {
+    const activeSessions = await db
+        .select()
+        .from(playersessionTable)
+        .where(
+            and(
+                eq(playersessionTable.playerId, player.id!),
+                eq(playersessionTable.projectId, project.id!),
+                isNull(playersessionTable.endTime)
+            )
+        );
+
+    if (activeSessions[0]) {
         return new Response(
             JSON.stringify({
                 status: 400,
@@ -67,6 +84,12 @@ export async function POST(event) {
             { status: 400 }
         );
     }
+
+    await db.insert(playersessionTable).values({
+        playerId: player.id,
+        projectId: project.id,
+        startTime: new Date(),
+    });
 
     await prisma.playerSession.create({
         data: {
